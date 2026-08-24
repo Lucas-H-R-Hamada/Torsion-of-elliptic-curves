@@ -1,5 +1,3 @@
 # Torsion of elliptic curves over quartic number fields with rational j-invariant
 
-Here, we made available every MAGMA code used during the paper "Torsion of elliptic curves over quartic number fields with rational j-invariant" (arXiv:....)
-
-Specifically, we 
+Here are the MAGMA computations verifying the results of the paper: L. Hamada "Torsion of elliptic curves over quartic number fields with rational j-invariant"
