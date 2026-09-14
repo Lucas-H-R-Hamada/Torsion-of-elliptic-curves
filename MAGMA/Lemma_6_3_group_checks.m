@@ -5,57 +5,75 @@
 // "Torsion of Elliptic Curves over Quartic Number Fields
 //  with Rational j-Invariant"
 //
-// These computations are sanity checks for the group-theoretic facts used
-// in the proof.  They do not replace the theoretical proof.
+// These computations verify finite-group assertions used in the proof.
 //
-// The script verifies:
-//   (1) S4 and D4 have no quotient isomorphic to C3;
-//   (2) the S3 point stabilizer in S4 is maximal;
-//   (3) the C3 point stabilizer in A4 is maximal;
-//   (4) a reflection subgroup of D4 is contained in exactly one
-//       subgroup of order 4;
-//   (5) standard matrix models for 3Ns, 3B, and 3Nn have orders
-//       8, 12, and 16, respectively;
-//   (6) none of GL(2,3), 3Ns, 3B, 3Nn has a quotient isomorphic to A4;
-//   (7) C4 has one subgroup of order 2, whereas C2 x C2 has three.
-//
-// Magma convention: DihedralGroup(n) has order 2*n.  Thus
-// DihedralGroup(4) is the dihedral group of order 8 used here as D4.
+// Magma convention:
+//     DihedralGroup(4)
+// has order 8.  Thus it is the group denoted D4 in the paper.
 ///////////////////////////////////////////////////////////////////////////
 
+
 ///////////////////////////////////////////////////////////////////////////
-// Utility: determine whether a finite group G has a quotient isomorphic
-// to a finite group H.
+// Utility function
+//
+// Returns true if G has a quotient isomorphic to H.
+//
+// We first replace both groups by faithful permutation representations.
+// This makes the normal-subgroup and quotient computations uniform for
+// permutation groups and matrix groups.
 ///////////////////////////////////////////////////////////////////////////
 
 function HasQuotientIsomorphicTo(G, H)
+
+    // Quick order obstruction.
     if Order(G) mod Order(H) ne 0 then
         return false;
     end if;
 
-    kernel_order := Order(G) div Order(H);
+    // Faithful permutation representation of G.
+    phiG, PG := MinimalDegreePermutationRepresentation(G);
 
-    normals := Subgroups(G : IsNormal := true,
-                             OrderEqual := kernel_order);
+    // Faithful permutation representation of H.
+    phiH, PH := MinimalDegreePermutationRepresentation(H);
+
+    kernel_order := Order(PG) div Order(PH);
+
+    // NormalSubgroups is used instead of
+    //
+    //     Subgroups(G : IsNormal := true)
+    //
+    // since the latter is not accepted for all relevant Magma
+    // group categories.
+    normals := NormalSubgroups(PG);
 
     for recN in normals do
-        N := recN`subgroup;
-        Q, pi := quo< G | N >;
 
-        if IsIsomorphic(Q, H) then
-            return true;
+        N := recN`subgroup;
+
+        if Order(N) eq kernel_order then
+
+            // Construct PG/N.
+            Q, pi := quo< PG | N >;
+
+            if IsIsomorphic(Q, PH) then
+                return true;
+            end if;
+
         end if;
+
     end for;
 
     return false;
+
 end function;
 
+
 ///////////////////////////////////////////////////////////////////////////
-// 1. No cyclic cubic quotient of S4 or D4.
+// 1. No cyclic cubic quotient of S4 or D4
 ///////////////////////////////////////////////////////////////////////////
 
 S4 := SymmetricGroup(4);
-D4 := DihedralGroup(4);       // order 8
+D4 := DihedralGroup(4);
 C3 := CyclicGroup(3);
 
 assert Order(S4) eq 24;
@@ -69,12 +87,15 @@ print "CHECK 1 PASSED:";
 print "Neither S4 nor D4 has a quotient isomorphic to C3.";
 print "";
 
+
 ///////////////////////////////////////////////////////////////////////////
-// 2. In S4, the point stabilizer S3 is maximal.
+// 2. S4 case
 //
-// For a non-Galois quartic field whose Galois closure has group S4,
-// this is the subgroup corresponding to the quartic field.  Maximality
-// means the quartic field has no nontrivial proper intermediate field.
+// A non-Galois quartic subfield of an S4-extension corresponds to
+// a point stabilizer S3 < S4.
+//
+// Its maximality implies that the corresponding quartic field has
+// no nontrivial proper intermediate field.
 ///////////////////////////////////////////////////////////////////////////
 
 H_S4 := Stabilizer(S4, 1);
@@ -85,10 +106,16 @@ assert IsMaximal(S4, H_S4);
 
 print "CHECK 2 PASSED:";
 print "A point stabilizer S3 < S4 has index 4 and is maximal.";
+print "Therefore the associated quartic field has no";
+print "nontrivial proper intermediate field.";
 print "";
 
+
 ///////////////////////////////////////////////////////////////////////////
-// 3. In A4, the point stabilizer C3 is maximal.
+// 3. A4 case
+//
+// A quartic subfield of an A4-extension corresponds to a point
+// stabilizer C3 < A4.
 ///////////////////////////////////////////////////////////////////////////
 
 A4 := AlternatingGroup(4);
@@ -103,17 +130,24 @@ print "CHECK 3 PASSED:";
 print "A point stabilizer C3 < A4 has index 4 and is maximal.";
 print "";
 
+
 ///////////////////////////////////////////////////////////////////////////
-// 4. The relevant D4 subgroup lattice.
+// 4. D4 case
 //
-// A non-Galois quartic subfield of a D4-extension is fixed by a
-// reflection subgroup H of order 2.  Quadratic intermediate fields
-// correspond to subgroups J of order 4 satisfying H <= J <= D4.
-// We verify that there is exactly one such J.
+// A non-Galois quartic subfield in a D4-extension is fixed by a
+// reflection subgroup H of order 2.
+//
+// Quadratic intermediate fields of the quartic field correspond
+// to order-4 subgroups J satisfying
+//
+//                H <= J <= D4.
+//
+// We verify that there is exactly one such subgroup J.
 ///////////////////////////////////////////////////////////////////////////
 
 r := D4.1;
 s := D4.2;
+
 H_D4 := sub< D4 | s >;
 
 assert Order(H_D4) eq 2;
@@ -121,72 +155,116 @@ assert Index(D4, H_D4) eq 4;
 
 OvergroupsOfOrder4 := [];
 
-for x in D4 do
-    for y in D4 do
-        J := sub< D4 | x, y >;
+for recJ in Subgroups(D4 : OrderEqual := 4) do
 
-        if Order(J) eq 4 and H_D4 subset J then
+    J := recJ`subgroup;
+
+    // Subgroups() returns conjugacy-class representatives.
+    // We must inspect all conjugates in the class.
+    for g in D4 do
+
+        Jg := J^g;
+
+        if H_D4 subset Jg then
+
             already_listed := false;
 
             for U in OvergroupsOfOrder4 do
-                if U eq J then
+                if U eq Jg then
                     already_listed := true;
                     break;
                 end if;
             end for;
 
             if not already_listed then
-                Append(~OvergroupsOfOrder4, J);
+                Append(~OvergroupsOfOrder4, Jg);
             end if;
+
         end if;
+
     end for;
+
 end for;
 
 assert #OvergroupsOfOrder4 eq 1;
 
 print "CHECK 4 PASSED:";
-print "A reflection subgroup of D4 is contained in exactly one";
-print "subgroup of order 4.";
+print "A reflection subgroup of D4 is contained in exactly";
+print "one subgroup of order 4.";
+print "Hence the corresponding non-Galois quartic field has";
+print "a unique quadratic intermediate field.";
 print "";
 
+
 ///////////////////////////////////////////////////////////////////////////
-// 5. Standard mod-3 image groups inside GL(2,F_3).
+// 5. Standard mod-3 image groups inside GL(2,F_3)
 ///////////////////////////////////////////////////////////////////////////
 
 G3 := GL(2, 3);
+
 assert Order(G3) eq 48;
 
-// 3Ns: normalizer of the split Cartan.
-d1 := G3![2,0,
-          0,1];
 
-d2 := G3![1,0,
-          0,2];
+// -----------------------------------------------------------------------
+// 3Ns: normalizer of a split Cartan subgroup
+// -----------------------------------------------------------------------
 
-w := G3![0,1,
-         1,0];
+d1 := G3![
+    2,0,
+    0,1
+];
+
+d2 := G3![
+    1,0,
+    0,2
+];
+
+w := G3![
+    0,1,
+    1,0
+];
 
 Ns3 := sub< G3 | d1, d2, w >;
+
 assert Order(Ns3) eq 8;
 
-// 3B: the upper-triangular Borel subgroup.
-u := G3![1,1,
-         0,1];
+
+// -----------------------------------------------------------------------
+// 3B: the upper triangular Borel subgroup
+// -----------------------------------------------------------------------
+
+u := G3![
+    1,1,
+    0,1
+];
 
 B3 := sub< G3 | d1, d2, u >;
+
 assert Order(B3) eq 12;
 
-// 3Nn: normalizer of a nonsplit Cartan.
-//
-// Let alpha^2 = -1 in F_9.  The matrix c represents multiplication
-// by 1+alpha, which has order 8.  The matrix t represents Frobenius
-// alpha |-> -alpha.  The relation c^t = c^3 is the semidihedral
-// relation for the order-16 normalizer.
-c := G3![1,2,
-         1,1];
 
-t := G3![1,0,
-         0,2];
+// -----------------------------------------------------------------------
+// 3Nn: normalizer of a nonsplit Cartan subgroup
+//
+// The matrix c has order 8.
+// The matrix t has order 2.
+// They satisfy
+//
+//                    c^t = c^3.
+//
+// Thus the generated group has the semidihedral presentation occurring
+// for the nonsplit Cartan normalizer in GL(2,F_3).
+// -----------------------------------------------------------------------
+
+c := G3![
+    1,2,
+    1,1
+];
+
+t := G3![
+    1,0,
+    0,2
+];
 
 Nn3 := sub< G3 | c, t >;
 
@@ -196,16 +274,36 @@ assert c^t eq c^3;
 assert Order(Nn3) eq 16;
 
 print "CHECK 5 PASSED:";
-print "Orders of the standard mod-3 image groups:";
-print "  |3Ns| =", Order(Ns3);
-print "  |3B|  =", Order(B3);
-print "  |3Nn| =", Order(Nn3);
-print "The generators of 3Nn satisfy c^t = c^3.";
+print "Orders of the relevant mod-3 image groups:";
+print "  |GL(2,3)| =", Order(G3);
+print "  |3Ns|     =", Order(Ns3);
+print "  |3B|      =", Order(B3);
+print "  |3Nn|     =", Order(Nn3);
+print "";
+print "For 3Nn:";
+print "  Order(c) = 8;";
+print "  Order(t) = 2;";
+print "  c^t = c^3.";
 print "";
 
+
 ///////////////////////////////////////////////////////////////////////////
-// 6. No A4 quotient for the possible mod-3 image groups used in
-// the A4 branch of Lemma 6.3.
+// 6. None of the possible mod-3 image groups has A4 as a quotient
+//
+// The four groups appearing in the relevant part of Lemma 6.3 are
+//
+//       GL(2,F_3),  3Ns,  3B,  3Nn.
+//
+// For 3Ns and 3Nn there is already an order obstruction:
+//
+//       12 does not divide 8,
+//       12 does not divide 16.
+//
+// For 3B, both groups have order 12, so an A4 quotient would force
+// 3B itself to be isomorphic to A4.
+//
+// We nevertheless let HasQuotientIsomorphicTo perform the checks
+// uniformly.
 ///////////////////////////////////////////////////////////////////////////
 
 assert not HasQuotientIsomorphicTo(G3,  A4);
@@ -214,15 +312,28 @@ assert not HasQuotientIsomorphicTo(B3,  A4);
 assert not HasQuotientIsomorphicTo(Nn3, A4);
 
 print "CHECK 6 PASSED:";
-print "None of GL(2,3), 3Ns, 3B, or 3Nn has a quotient";
-print "isomorphic to A4.";
+print "None of";
+print "";
+print "    GL(2,3), 3Ns, 3B, 3Nn";
+print "";
+print "has a quotient isomorphic to A4.";
 print "";
 
+
 ///////////////////////////////////////////////////////////////////////////
-// 7. Cyclic quartic versus biquadratic extensions.
+// 7. Cyclic quartic versus biquadratic extensions
 //
-// By Galois correspondence, a C4-extension has exactly one quadratic
-// subfield, while a V4-extension has exactly three.
+// By Galois correspondence:
+//
+//   C4 has exactly one subgroup of order 2,
+//   C2 x C2 has exactly three subgroups of order 2.
+//
+// Thus:
+//
+//   a cyclic quartic extension has one quadratic subfield;
+//   a biquadratic extension has three quadratic subfields.
+//
+// This distinction is relevant in the D4 portion of Lemma 6.3.
 ///////////////////////////////////////////////////////////////////////////
 
 C4 := CyclicGroup(4);
@@ -238,8 +349,8 @@ assert nC4 eq 1;
 assert nV4 eq 3;
 
 print "CHECK 7 PASSED:";
-print "Number of subgroups of order 2 in C4:", nC4;
-print "Number of subgroups of order 2 in C2 x C2:", nV4;
+print "Number of order-2 subgroups of C4:", nC4;
+print "Number of order-2 subgroups of C2 x C2:", nV4;
 print "";
 
 print "============================================================";
