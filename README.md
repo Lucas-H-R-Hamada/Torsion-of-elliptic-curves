@@ -51,12 +51,3 @@ In particular, it verifies:
   admits a quotient isomorphic to `A4`;
 - the distinction between cyclic quartic and biquadratic extensions
   at the level of their quadratic subfields.
-
-## Running the computations
-
-The files are written for the Magma computer algebra system.
-
-For example:
-
-```text
-magma example_6_5.m
